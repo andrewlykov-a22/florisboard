@@ -27,7 +27,7 @@
    Точки изменения: `AbstractEditorInstance.isRawInputForSuggestions()` (raw-редакторы
    обрабатываются как rich), `shouldDetermineComposingRegion`, `isComposingEnabled`
    в EditorInstance, `isSuggestionOn()` в NlpManager. Иконка — в ComputingEvaluator
-   (`Icons.Default.Spellcheck`), строки `force_suggestions__*` и
+   (`Icons.Default.Create`), строки `force_suggestions__*` и
    `quick_action__toggle_force_suggestions*` в strings.xml, стандартный набор —
    QuickActionArrangement.Default.
 7. CI: `.github/workflows/russian-suggestions.yml` — `assembleDebug` при push в
