@@ -35,8 +35,13 @@
    подписи (секреты), а debug ставится рядом с официальным приложением
    (пакет `dev.patrickgold.florisboard.debug`).
 
-## С чем столкнулись (грабли)
+## Грабли
 
+- **Локальная сборка в Termux не работает**: на устройстве нет Android SDK
+  (нет `ANDROID_HOME`, `~/android-sdk`, `local.properties`), `gradlew assembleDebug`
+  падает на конфигурации `:lib:native` с "SDK location not found".
+  **Собираем только через GitHub Actions**: push в `feature/russian-suggestions`
+  → workflow `russian-suggestions.yml` (~7 мин) → артефакт `app-debug.apk`.
 - **Снапшот jetpref удалён из Sonatype**: `20251119T222500Z-SNAPSHOT` протух.
   Релиз `0.5.0-beta01` собран под compileSdk 37 / Kotlin 2.4 — с v0.5.2
   (SDK 36, Kotlin 2.2.20) конфликт метаданных. Решение — composite build на
