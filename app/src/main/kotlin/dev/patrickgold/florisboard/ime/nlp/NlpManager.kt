@@ -194,6 +194,7 @@ class NlpManager(context: Context) {
     fun isSuggestionOn(): Boolean =
         prefs.suggestion.enabled.get()
             || prefs.emoji.suggestionEnabled.get()
+            || keyboardManager.activeState.isForceSuggestions
             || providerForcesSuggestionOn(subtypeManager.activeSubtype)
 
     fun suggest(subtype: Subtype, content: EditorContent) {

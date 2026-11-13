@@ -103,6 +103,11 @@ abstract class AbstractEditorInstance(context: Context) {
 
     private fun currentInputConnection() = FlorisImeService.currentInputConnection()
 
+    private fun forceSuggestionsActive() = keyboardManager.activeState.isForceSuggestions
+
+    private fun isRawInputForSuggestions(editorInfo: FlorisEditorInfo) =
+        editorInfo.isRawInputEditor && !forceSuggestionsActive()
+
     open fun handleStartInput(editorInfo: FlorisEditorInfo) {
         activeInfo = editorInfo
         activeCursorCapsMode = editorInfo.initialCapsMode
@@ -117,7 +122,7 @@ abstract class AbstractEditorInstance(context: Context) {
         val ic = currentInputConnection()
         activeInfo = editorInfo
         var selection = editorInfo.initialSelection
-        if (ic == null || selection.isNotValid || editorInfo.isRawInputEditor) {
+        if (ic == null || selection.isNotValid || isRawInputForSuggestions(editorInfo)) {
             activeCursorCapsMode = InputAttributes.CapsMode.NONE
             activeContent = EditorContent.Unspecified
             keyboardManager.reevaluateInputShiftState()
@@ -165,7 +170,7 @@ abstract class AbstractEditorInstance(context: Context) {
     open fun handleSelectionUpdate(oldSelection: EditorRange, newSelection: EditorRange, composing: EditorRange) {
         val ic = currentInputConnection()
         val editorInfo = activeInfo
-        if (ic == null || newSelection.isNotValid || editorInfo.isRawInputEditor) {
+        if (ic == null || newSelection.isNotValid || isRawInputForSuggestions(editorInfo)) {
             activeCursorCapsMode = InputAttributes.CapsMode.NONE
             activeContent = EditorContent.Unspecified
             keyboardManager.reevaluateInputShiftState()
@@ -291,6 +296,7 @@ abstract class AbstractEditorInstance(context: Context) {
     abstract fun determineComposer(composerName: ExtensionComponentName): Composer
 
     protected open fun shouldDetermineComposingRegion(editorInfo: FlorisEditorInfo): Boolean {
+        if (forceSuggestionsActive()) return true
         return editorInfo.isRichInputEditor && !editorInfo.inputAttributes.flagTextNoSuggestions
     }
 
@@ -392,7 +398,7 @@ abstract class AbstractEditorInstance(context: Context) {
         val selection = content.selection
         ic.beginBatchEdit()
         ic.finishComposingText()
-        if (activeInfo.isRawInputEditor) {
+        if (isRawInputForSuggestions(activeInfo)) {
             ic.commitText(text, 1)
         } else runBlocking {
             val newSelection = EditorRange.cursor(selection.start + text.length)
@@ -417,7 +423,7 @@ abstract class AbstractEditorInstance(context: Context) {
         val content = activeContent
         val composing = content.composing
         ic.beginBatchEdit()
-        if (activeInfo.isRawInputEditor || composing.isNotValid) {
+        if (isRawInputForSuggestions(activeInfo) || composing.isNotValid) {
             return false
         } else runBlocking {
             val newSelection = EditorRange.cursor(composing.end + (text.length - content.composingText.length))
@@ -448,7 +454,7 @@ abstract class AbstractEditorInstance(context: Context) {
             OperationScope.BEFORE_CURSOR -> content.textBeforeSelection
             OperationScope.AFTER_CURSOR -> content.textAfterSelection
         }
-        return (if (activeInfo.isRawInputEditor || scopeText.isEmpty()) {
+        return (if (isRawInputForSuggestions(activeInfo) || scopeText.isEmpty()) {
             // If editor is rich and text before selection is empty we seem to have an invalid state here, so we fall
             // back to emulating a hardware backspace/forward delete.
             val keyEventCode = when (scope) {
@@ -509,7 +515,7 @@ abstract class AbstractEditorInstance(context: Context) {
     fun refreshComposing() {
         val content = activeContent
         val ic = currentInputConnection()
-        if (activeInfo.isRawInputEditor || ic == null) return
+        if (isRawInputForSuggestions(activeInfo) || ic == null) return
         runBlocking {
             val newContent = content.generateCopy()
             if (newContent.composing != content.composing) {

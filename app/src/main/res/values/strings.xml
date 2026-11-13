@@ -91,6 +91,8 @@
     <string name="quick_action__toggle_actions_overflow__tooltip">Show or hide additional actions</string>
     <string name="quick_action__toggle_incognito_mode" comment="Please mind the limited available space for the quick action strings">Incognito</string>
     <string name="quick_action__toggle_incognito_mode__tooltip">Toggle incognito mode</string>
+    <string name="quick_action__toggle_force_suggestions" comment="Please mind the limited available space for the quick action strings">Force sugg.</string>
+    <string name="quick_action__toggle_force_suggestions__tooltip">Toggle force suggestions (show suggestions in any input field)</string>
     <string name="quick_action__toggle_autocorrect" comment="Please mind the limited available space for the quick action strings">Autocorrect</string>
     <string name="quick_action__toggle_autocorrect__tooltip">Toggle autocorrect</string>
     <string name="quick_action__voice_input" comment="Please mind the limited available space for the quick action strings">Voice input</string>
@@ -111,6 +113,10 @@
     <!-- Incognito mode strings -->
     <string name="incognito_mode__toast_after_enabled">Incognito mode is now enabled\n\n{app_name} will not learn words from your input while this mode is active</string>
     <string name="incognito_mode__toast_after_disabled">Incognito mode is now disabled by default</string>
+
+    <!-- Force suggestions strings -->
+    <string name="force_suggestions__toast_after_enabled">Force suggestions is now enabled\n\n{app_name} will show word suggestions even in input fields that disable them (e.g. terminals)</string>
+    <string name="force_suggestions__toast_after_disabled">Force suggestions is now disabled</string>
 
     <!-- Settings UI strings -->
     <string name="settings__title" comment="Title of Settings">Settings</string>
@@ -473,6 +479,8 @@
     <string name="pref__suggestion__title" comment="Preference group title">Suggestions</string>
     <string name="pref__suggestion__enabled__label" comment="Preference title">Display suggestions</string>
     <string name="pref__suggestion__enabled__summary" comment="Preference summary">Provides suggestions while you type</string>
+    <string name="pref__suggestion__force_enabled__label" comment="Preference title">Force suggestions</string>
+    <string name="pref__suggestion__force_enabled__summary" comment="Preference summary">Show word suggestions even in input fields that disable them (e.g. terminals, password managers). Toggleable from the smartbar.</string>
     <string name="pref__suggestion__display_mode__label" comment="Preference title">Suggestions display mode</string>
     <string name="pref__suggestion__block_possibly_offensive__label" comment="Preference title">Block possibly offensive words</string>
     <string name="pref__suggestion__block_possibly_offensive__summary" comment="Preference summary">Prevents possibly offensive words from being suggested while you type</string>

@@ -617,6 +617,26 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
     }
 
     /**
+     * Handles a [KeyCode.TOGGLE_FORCE_SUGGESTIONS] event.
+     */
+    private suspend fun handleToggleForceSuggestions() {
+        val newState = !prefs.suggestion.forceEnabled.get()
+        prefs.suggestion.forceEnabled.set(newState)
+        activeState.isForceSuggestions = newState
+        lastToastReference.get()?.cancel()
+        lastToastReference = WeakReference(
+            appContext.showLongToast(
+                if (newState) R.string.force_suggestions__toast_after_enabled else R.string.force_suggestions__toast_after_disabled,
+                "app_name" to appContext.getString(R.string.floris_app_name),
+            )
+        )
+        // Re-read editor content so the composing region and suggestions are re-evaluated
+        // for the current input field (raw editors were previously skipped).
+        editorInstance.handleStartInputView(editorInstance.activeInfo, false)
+        resetSuggestions(editorInstance.activeContent)
+    }
+
+    /**
      * Handles a [KeyCode.KANA_SWITCHER] event
      */
     private fun handleKanaSwitch() {
@@ -772,6 +792,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
             }
             KeyCode.TOGGLE_INCOGNITO_MODE -> scope.launch { handleToggleIncognitoMode() }
             KeyCode.TOGGLE_AUTOCORRECT -> handleToggleAutocorrect()
+            KeyCode.TOGGLE_FORCE_SUGGESTIONS -> scope.launch { handleToggleForceSuggestions() }
             KeyCode.UNDO -> editorInstance.performUndo()
             KeyCode.VIEW_CHARACTERS -> activeState.keyboardMode = KeyboardMode.CHARACTERS
             KeyCode.VIEW_NUMERIC -> activeState.keyboardMode = KeyboardMode.NUMERIC

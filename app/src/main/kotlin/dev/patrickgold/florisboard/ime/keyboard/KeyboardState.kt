@@ -87,6 +87,7 @@ open class KeyboardState protected constructor(open var rawValue: ULong) {
         const val F_IS_COMPOSING_ENABLED: ULong =           0x00100000u
 
         const val F_IS_CHAR_HALF_WIDTH: ULong =             0x00200000u
+        const val F_IS_FORCE_SUGGESTIONS: ULong =           0x01000000u
         const val F_IS_KANA_KATA: ULong =                   0x00400000u
         const val F_IS_KANA_SMALL: ULong =                  0x00800000u
 
@@ -198,6 +199,10 @@ open class KeyboardState protected constructor(open var rawValue: ULong) {
     var isComposingEnabled: Boolean
         get() = getFlag(F_IS_COMPOSING_ENABLED)
         set(v) { setFlag(F_IS_COMPOSING_ENABLED, v) }
+
+    var isForceSuggestions: Boolean
+        get() = getFlag(F_IS_FORCE_SUGGESTIONS)
+        set(v) { setFlag(F_IS_FORCE_SUGGESTIONS, v) }
 
     var isKanaKata: Boolean
         get() = getFlag(F_IS_KANA_KATA)

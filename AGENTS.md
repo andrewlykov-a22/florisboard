@@ -20,7 +20,17 @@
    (автоматическая подстановка через публикации vanniktech-плагина не срабатывает).
 4. Версия поднята: `0.5.2 → 0.5.3` (versionCode 117 → 118) в `gradle.properties`.
 5. Кредиты форка — в About (`about__fork_credit__*` в strings.xml).
-6. CI: `.github/workflows/russian-suggestions.yml` — `assembleDebug` по пушу в
+6. **Force suggestions** (кнопка принудительных подсказок): `KeyCode.TOGGLE_FORCE_SUGGESTIONS` (-246)
+   + преф `suggestion__force_enabled` (`prefs.suggestion.forceEnabled`). Когда включено,
+   клавиатура игнорирует запреты поля ввода (`TYPE_NULL`, `NO_SUGGESTIONS`, raw-редакторы)
+   и показывает подсказки где угодно (нужно для терминалов при работе с ИИ-агентами).
+   Точки обхода: `AbstractEditorInstance.isRawInputForSuggestions()` (raw-редакторы
+   обрабатываются как rich), `shouldDetermineComposingRegion`, `isComposingEnabled`
+   в EditorInstance, `isSuggestionOn()` в NlpManager. Иконка — в ComputingEvaluator
+   (`Icons.Default.Spellcheck`), строки `force_suggestions__*` и
+   `quick_action__toggle_force_suggestions*` в strings.xml, дефолтный набор —
+   QuickActionArrangement.Default.
+7. CI: `.github/workflows/russian-suggestions.yml` — `assembleDebug` по пушу в
    ветку; артефакт `app-debug.apk`. Сборка debug, т.к. release требует
    подписи (секреты), а debug ставится рядом с официальным приложением
    (пакет `dev.patrickgold.florisboard.debug`).
