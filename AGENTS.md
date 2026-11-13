@@ -26,8 +26,9 @@
    и показывает подсказки в любом поле (необходимо для терминалов при работе с ИИ-агентами).
    Точки изменения: `AbstractEditorInstance.isRawInputForSuggestions()` (raw-редакторы
    обрабатываются как rich), `shouldDetermineComposingRegion`, `isComposingEnabled`
-   в EditorInstance, `isSuggestionOn()` в NlpManager. Иконка — в ComputingEvaluator
-   (`Icons.Default.Create`), строки `force_suggestions__*` и
+   в EditorInstance, `isSuggestionOn()` в NlpManager. Иконка — собственный векторный
+   drawable `ic_force_suggestions.xml` (material-icons-extended в новом compose-bom
+   частично недоступен), строки `force_suggestions__*` и
    `quick_action__toggle_force_suggestions*` в strings.xml, стандартный набор —
    QuickActionArrangement.Default.
 7. CI: `.github/workflows/russian-suggestions.yml` — `assembleDebug` при push в
