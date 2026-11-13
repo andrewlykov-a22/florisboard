@@ -578,6 +578,8 @@
     <string name="about__license__title" comment="Title of Open-source licenses dialog">Open-source licenses</string>
 
     <string name="about__version__title" comment="Preference title">Version</string>
+    <string name="about__fork_credit__title" comment="Fork credit title">Russian suggestions fork</string>
+    <string name="about__fork_credit__summary" comment="Fork credit summary">Prefix-suggestion provider and Russian frequency dictionary (60k words, OpenSubtitles). Built with Kimi Code CLI by Moonshot AI, 2026-11-13.</string>
     <string name="about__version_copied__title" comment="Title of the toast for copying the version string">Version copied to clipboard</string>
     <string name="about__version_copied__error" comment="Title of the error toast for copying the version string">Something went wrong: {error_message}</string>
     <string name="about__changelog__title" comment="Preference title">Changelog</string>

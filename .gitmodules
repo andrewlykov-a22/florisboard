@@ -1,0 +1,3 @@
+[submodule "jetpref-build"]
+	path = jetpref-build
+	url = https://github.com/patrickgold/jetpref

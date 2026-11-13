@@ -16,6 +16,9 @@
 
 rootProject.name = "FlorisBoard"
 
+// Vendored jetpref at the commit the original snapshot was built from (d6e12dd)
+includeBuild("jetpref-build")
+
 pluginManagement {
     repositories {
         gradlePluginPortal()
@@ -29,7 +32,6 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         // Uncomment the following if testing snapshots from Maven Central
-        maven("https://jitpack.io")
         // Uncomment the following if testing snapshots from Maven Local
         // mavenLocal()
     }

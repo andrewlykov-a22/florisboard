@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Policy
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -94,6 +95,11 @@ fun AboutScreen() = FlorisScreen {
                     ).show()
                 }
             },
+        )
+        Preference(
+            icon = Icons.Outlined.Star,
+            title = stringRes(R.string.about__fork_credit__title),
+            summary = stringRes(R.string.about__fork_credit__summary),
         )
         Preference(
             icon = Icons.Default.History,
