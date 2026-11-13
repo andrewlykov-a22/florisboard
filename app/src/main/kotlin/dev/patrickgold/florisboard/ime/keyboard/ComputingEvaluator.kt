@@ -291,7 +291,7 @@ fun ComputingEvaluator.computeImageVector(data: KeyData): ImageVector? {
             Icons.Default.FontDownload
         }
         KeyCode.TOGGLE_FORCE_SUGGESTIONS -> {
-            Icons.Default.Spellcheck
+            Icons.Default.Create
         }
         KeyCode.KANA_SWITCHER -> {
             if (evaluator.state.isKanaKata) {
