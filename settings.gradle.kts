@@ -29,7 +29,7 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         // Uncomment the following if testing snapshots from Maven Central
-        maven("https://central.sonatype.com/repository/maven-snapshots/")
+        maven("https://jitpack.io")
         // Uncomment the following if testing snapshots from Maven Local
         // mavenLocal()
     }
