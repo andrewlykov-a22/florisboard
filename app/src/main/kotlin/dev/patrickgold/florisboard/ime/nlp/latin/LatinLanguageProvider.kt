@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022-2025 The FlorisBoard Contributors
+ * Copyright (C) 2022-2026 The FlorisBoard Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import dev.patrickgold.florisboard.ime.nlp.SpellingProvider
 import dev.patrickgold.florisboard.ime.nlp.SpellingResult
 import dev.patrickgold.florisboard.ime.nlp.SuggestionCandidate
 import dev.patrickgold.florisboard.ime.nlp.SuggestionProvider
+import dev.patrickgold.florisboard.ime.nlp.WordSuggestionCandidate
 import dev.patrickgold.florisboard.lib.devtools.flogDebug
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -32,50 +33,64 @@ import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import org.florisboard.lib.android.readText
 import org.florisboard.lib.kotlin.guardedByLock
+import java.util.TreeMap
 
 class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProvider {
     companion object {
-        // Default user ID used for all subtypes, unless otherwise specified.
-        // See `ime/core/Subtype.kt` Line 210 and 211 for the default usage
         const val ProviderId = "org.florisboard.nlp.providers.latin"
+
+        private const val MAX_DICTIONARY_WORDS = 60_000
     }
 
     private val appContext by context.appContext()
 
-    private val wordData = guardedByLock { mutableMapOf<String, Int>() }
+    private data class DictEntry(val words: TreeMap<String, Int>)
+
+    private val dicts = guardedByLock { mutableMapOf<String, DictEntry>() }
     private val wordDataSerializer = MapSerializer(String.serializer(), Int.serializer())
 
     override val providerId = ProviderId
 
     override suspend fun create() {
-        // Here we initialize our provider, set up all things which are not language dependent.
+        // Nothing to set up globally, dictionaries are loaded lazily in preload().
+    }
+
+    private fun loadDict(lang: String): DictEntry {
+        val assetPath = when (lang) {
+            "en" -> "ime/dict/data.json"
+            else -> "ime/dict/$lang.json"
+        }
+        val rawData = try {
+            appContext.assets.readText(assetPath)
+        } catch (e: Exception) {
+            flogDebug { "no dictionary asset for lang=$lang, falling back to en" }
+            appContext.assets.readText("ime/dict/data.json")
+        }
+        val jsonData = Json.decodeFromString(wordDataSerializer, rawData)
+        return DictEntry(TreeMap(jsonData))
     }
 
     override suspend fun preload(subtype: Subtype) = withContext(Dispatchers.IO) {
-        // Here we have the chance to preload dictionaries and prepare a neural network for a specific language.
-        // Is kept in sync with the active keyboard subtype of the user, however a new preload does not necessary mean
-        // the previous language is not needed anymore (e.g. if the user constantly switches between two subtypes)
-
-        // To read a file from the APK assets the following methods can be used:
-        // appContext.assets.open()
-        // appContext.assets.reader()
-        // appContext.assets.bufferedReader()
-        // appContext.assets.readText()
-        // To copy an APK file/dir to the file system cache (appContext.cacheDir), the following methods are available:
-        // appContext.assets.copy()
-        // appContext.assets.copyRecursively()
-
-        // The subtype we get here contains a lot of data, however we are only interested in subtype.primaryLocale and
-        // subtype.secondaryLocales.
-
-        wordData.withLock { wordData ->
-            if (wordData.isEmpty()) {
-                // Here we use readText() because the test dictionary is a json dictionary
-                val rawData = appContext.assets.readText("ime/dict/data.json")
-                val jsonData = Json.decodeFromString(wordDataSerializer, rawData)
-                wordData.putAll(jsonData)
+        val lang = subtype.primaryLocale.language
+        dicts.withLock { dicts ->
+            if (dicts[lang] == null) {
+                dicts[lang] = loadDict(lang)
             }
         }
+    }
+
+    private fun prefixMatches(dict: DictEntry, prefix: String, limit: Int): List<Pair<String, Int>> {
+        if (prefix.isBlank()) return emptyList()
+        val tail = dict.words.tailMap(prefix)
+        val result = ArrayList<Pair<String, Int>>(limit)
+        for ((word, freq) in tail) {
+            if (!word.startsWith(prefix)) break
+            if (word == prefix) continue
+            result.add(word to freq)
+            if (result.size >= limit * 4) break
+        }
+        result.sortByDescending { it.second }
+        return result.take(limit)
     }
 
     override suspend fun spell(
@@ -87,14 +102,17 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
         allowPossiblyOffensive: Boolean,
         isPrivateSession: Boolean,
     ): SpellingResult {
-        return when (word.lowercase()) {
-            // Use typo for typing errors
-            "typo" -> SpellingResult.typo(arrayOf("typo1", "typo2", "typo3"))
-            // Use grammar error if the algorithm can detect this. On Android 11 and lower grammar errors are visually
-            // marked as typos due to a lack of support
-            "gerror" -> SpellingResult.grammarError(arrayOf("grammar1", "grammar2", "grammar3"))
-            // Use valid word for valid input
-            else -> SpellingResult.validWord()
+        val lang = subtype.primaryLocale.language
+        val dict = dicts.withLock { it[lang] } ?: return SpellingResult.validWord()
+        val lower = word.lowercase()
+        if (dict.words.containsKey(lower) || dict.words.containsKey(word)) {
+            return SpellingResult.validWord()
+        }
+        val suggestions = prefixMatches(dict, lower, maxSuggestionCount).map { it.first }.toTypedArray()
+        return if (suggestions.isEmpty()) {
+            SpellingResult.validWord()
+        } else {
+            SpellingResult.typo(suggestions)
         }
     }
 
@@ -105,25 +123,23 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
         allowPossiblyOffensive: Boolean,
         isPrivateSession: Boolean,
     ): List<SuggestionCandidate> {
-        return emptyList()
-        /*val word = content.composingText.ifBlank { "next" }
-        val suggestions = buildList {
-            for (n in 0 until maxCandidateCount) {
-                add(WordSuggestionCandidate(
-                    text = "$word$n",
-                    secondaryText = if (n % 2 == 1) "secondary" else null,
-                    confidence = 0.5,
-                    isEligibleForAutoCommit = false,//n == 0 && word.startsWith("auto"),
-                    // We set ourselves as the source provider so we can get notify events for our candidate
-                    sourceProvider = this@LatinLanguageProvider,
-                ))
-            }
+        val lang = subtype.primaryLocale.language
+        val dict = dicts.withLock { it[lang] } ?: return emptyList()
+        val composing = content.composingText.trim().lowercase()
+        if (composing.isBlank() || composing.any { it.isWhitespace() }) return emptyList()
+        val matches = prefixMatches(dict, composing, maxCandidateCount)
+        return matches.mapIndexed { index, (word, freq) ->
+            WordSuggestionCandidate(
+                text = word,
+                secondaryText = null,
+                confidence = (1.0 - index * 0.05).coerceAtLeast(0.1),
+                isEligibleForAutoCommit = index == 0 && word.length == composing.length + 1,
+                sourceProvider = this@LatinLanguageProvider,
+            )
         }
-        return suggestions*/
     }
 
     override suspend fun notifySuggestionAccepted(subtype: Subtype, candidate: SuggestionCandidate) {
-        // We can use flogDebug, flogInfo, flogWarning and flogError for debug logging, which is a wrapper for Logcat
         flogDebug { candidate.toString() }
     }
 
@@ -137,15 +153,16 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
     }
 
     override suspend fun getListOfWords(subtype: Subtype): List<String> {
-        return wordData.withLock { it.keys.toList() }
+        val lang = subtype.primaryLocale.language
+        return dicts.withLock { it[lang]?.words?.keys?.toList() ?: emptyList() }
     }
 
     override suspend fun getFrequencyForWord(subtype: Subtype, word: String): Double {
-        return wordData.withLock { it.getOrDefault(word, 0) / 255.0 }
+        val lang = subtype.primaryLocale.language
+        return dicts.withLock { it[lang]?.words?.get(word) ?: 0 } / 255.0
     }
 
     override suspend fun destroy() {
-        // Here we have the chance to de-allocate memory and finish our work. However this might never be called if
-        // the app process is killed (which will most likely always be the case).
+        dicts.withLock { it.clear() }
     }
 }
