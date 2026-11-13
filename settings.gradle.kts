@@ -17,7 +17,14 @@
 rootProject.name = "FlorisBoard"
 
 // Vendored jetpref at the commit the original snapshot was built from (d6e12dd)
-includeBuild("jetpref-build")
+includeBuild("jetpref-build") {
+    dependencySubstitution {
+        substitute(module("dev.patrickgold.jetpref:jetpref-datastore-model")).using(project(":datastore-model"))
+        substitute(module("dev.patrickgold.jetpref:jetpref-datastore-model-processor")).using(project(":datastore-model-processor"))
+        substitute(module("dev.patrickgold.jetpref:jetpref-datastore-ui")).using(project(":datastore-ui"))
+        substitute(module("dev.patrickgold.jetpref:jetpref-material-ui")).using(project(":material-ui"))
+    }
+}
 
 pluginManagement {
     repositories {
