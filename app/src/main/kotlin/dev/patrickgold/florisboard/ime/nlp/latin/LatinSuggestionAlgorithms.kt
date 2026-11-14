@@ -57,22 +57,27 @@ object LatinSuggestionAlgorithms {
         return prev[b.length]
     }
 
-    /** Words close to [word] by edit distance (same first letter, similar length). */
-    fun fuzzyMatches(words: TreeMap<String, Int>, word: String, limit: Int): List<Pair<String, Int>> {
+    /** Best fuzzy candidates with their edit distance, best first. */
+    fun fuzzyMatchesWithDistance(words: TreeMap<String, Int>, word: String, limit: Int): List<Triple<String, Int, Int>> {
         if (word.isBlank()) return emptyList()
         val maxDist = if (word.length >= 5) 2 else 1
         val first = word.first()
-        val result = ArrayList<Pair<String, Int>>()
+        val result = ArrayList<Triple<String, Int, Int>>()
         for ((candidate, freq) in words.tailMap(first.toString())) {
             if (candidate.first() != first) break
             if (abs(candidate.length - word.length) > maxDist) continue
-            if (levenshtein(candidate, word) <= maxDist) {
-                result.add(candidate to freq)
+            val dist = levenshtein(candidate, word)
+            if (dist in 1..maxDist) {
+                result.add(Triple(candidate, freq, dist))
             }
         }
-        result.sortByDescending { it.second }
+        result.sortWith(compareByDescending<Triple<String, Int, Int>> { it.second }.thenBy { it.third })
         return result.take(limit)
     }
+
+    /** Words close to [word] by edit distance (same first letter, similar length). */
+    fun fuzzyMatches(words: TreeMap<String, Int>, word: String, limit: Int): List<Pair<String, Int>> =
+        fuzzyMatchesWithDistance(words, word, limit).map { it.first to it.second }
 
     /** Score boost for words the user has previously used after the predecessor. */
     fun bigramBoost(predictedForPrev: List<String>, word: String): Int {
@@ -83,11 +88,17 @@ object LatinSuggestionAlgorithms {
     /**
      * Whether the best fuzzy correction may be auto-committed on a word separator.
      * Only with independent evidence: the candidate continues a known bigram with the
-     * previous word, or it is the single unambiguous match. Ambiguous guesses are
-     * shown in the candidate row only — never silently substituted.
+     * previous word, is the single unambiguous match, or is strictly closer than the
+     * runner-up (distance margin). Ambiguous ties like "сым" -> "сам"/"сын" are shown
+     * in the candidate row only — never silently substituted.
      */
-    fun isFuzzyAutoCommitAllowed(fuzzy: List<String>, predictedForPrev: List<String>): Boolean {
-        val best = fuzzy.firstOrNull() ?: return false
-        return best in predictedForPrev || fuzzy.size == 1
+    fun isFuzzyAutoCommitAllowed(
+        fuzzyWithDistance: List<Triple<String, Int, Int>>,
+        predictedForPrev: List<String>,
+    ): Boolean {
+        val best = fuzzyWithDistance.firstOrNull() ?: return false
+        if (best.first in predictedForPrev) return true
+        if (fuzzyWithDistance.size == 1) return true
+        return best.third < fuzzyWithDistance[1].third
     }
 }

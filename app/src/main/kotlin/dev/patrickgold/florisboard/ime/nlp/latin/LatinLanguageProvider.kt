@@ -179,17 +179,16 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
         val composingIsValidWord = dict.words.containsKey(composing)
         if (matches.isEmpty() && !composingIsValidWord) {
             // Typo with no prefix completions: offer close dictionary words. Auto-commit
-            // only with independent evidence (bigram with prev word or a single unambiguous
-            // match) — ambiguous guesses like "сым" -> "сам"/"сын" require a user tap.
-            val fuzzy = LatinSuggestionAlgorithms.fuzzyMatches(dict.words, composing, maxCandidateCount * 2)
-                .sortedByDescending { (word, freq) ->
-                    freq + LatinSuggestionAlgorithms.bigramBoost(predictedForPrev, word)
+            // only with independent evidence (bigram with prev word, single match, or a
+            // distance margin over the runner-up) — ambiguous ties like "сым" -> "сам"/
+            // "сын" are shown but never silently substituted.
+            val fuzzy = LatinSuggestionAlgorithms.fuzzyMatchesWithDistance(dict.words, composing, maxCandidateCount * 2)
+                .sortedByDescending { (word, freq, dist) ->
+                    freq + LatinSuggestionAlgorithms.bigramBoost(predictedForPrev, word) - dist
                 }
                 .take(maxCandidateCount)
-            val allowAutoCommit = LatinSuggestionAlgorithms.isFuzzyAutoCommitAllowed(
-                fuzzy.map { it.first }, predictedForPrev,
-            )
-            return fuzzy.mapIndexed { index, (word, freq) ->
+            val allowAutoCommit = LatinSuggestionAlgorithms.isFuzzyAutoCommitAllowed(fuzzy, predictedForPrev)
+            return fuzzy.mapIndexed { index, (word, freq, dist) ->
                 WordSuggestionCandidate(
                     text = word,
                     secondaryText = null,

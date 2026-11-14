@@ -69,14 +69,22 @@ class LatinSuggestionAlgorithmsTest {
 
     @Test
     fun `auto-commit allowed only with evidence`() {
-        // Ambiguous: two equally plausible corrections, no context -> no auto-commit
-        assertFalse(LatinSuggestionAlgorithms.isFuzzyAutoCommitAllowed(listOf("сам", "сын"), emptyList()))
+        fun f(vararg entries: Triple<String, Int, Int>) = entries.toList()
+        // Ambiguous tie: two candidates at the same minimal distance, no context -> no auto-commit
+        assertFalse(LatinSuggestionAlgorithms.isFuzzyAutoCommitAllowed(
+            f(Triple("сам", 255, 1), Triple("сын", 200, 1)), emptyList()))
         // Single unambiguous match -> allowed
-        assertTrue(LatinSuggestionAlgorithms.isFuzzyAutoCommitAllowed(listOf("привет"), emptyList()))
+        assertTrue(LatinSuggestionAlgorithms.isFuzzyAutoCommitAllowed(
+            f(Triple("привет", 100, 1)), emptyList()))
+        // Distance margin: best is strictly closer than the runner-up -> allowed
+        assertTrue(LatinSuggestionAlgorithms.isFuzzyAutoCommitAllowed(
+            f(Triple("привет", 100, 1), Triple("прийти", 90, 2)), emptyList()))
         // Best candidate continues a known bigram -> allowed
-        assertTrue(LatinSuggestionAlgorithms.isFuzzyAutoCommitAllowed(listOf("сын", "сам"), listOf("сын")))
+        assertTrue(LatinSuggestionAlgorithms.isFuzzyAutoCommitAllowed(
+            f(Triple("сын", 200, 1), Triple("сам", 255, 1)), listOf("сын")))
         // Best candidate is NOT in bigrams even though a worse one is -> no
-        assertFalse(LatinSuggestionAlgorithms.isFuzzyAutoCommitAllowed(listOf("сам", "сын"), listOf("сын")))
+        assertFalse(LatinSuggestionAlgorithms.isFuzzyAutoCommitAllowed(
+            f(Triple("сам", 255, 1), Triple("сын", 200, 1)), listOf("сын")))
         // Empty -> no
         assertFalse(LatinSuggestionAlgorithms.isFuzzyAutoCommitAllowed(emptyList(), emptyList()))
     }
