@@ -114,6 +114,8 @@ data class WordSuggestionCandidate(
     /** If true, this candidate is a next-word prediction (no composing text) and a space
      *  should be committed right after it. */
     val isNextWordPrediction: Boolean = false,
+    // Immutable context from the request that created this candidate.
+    val learningContext: WordLearningContext? = null,
 ) : SuggestionCandidate {
     override val icon: ImageVector? = null
 }

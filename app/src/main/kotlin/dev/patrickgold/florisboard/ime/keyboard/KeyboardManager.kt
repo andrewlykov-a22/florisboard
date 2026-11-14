@@ -156,6 +156,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
                 updateActiveEvaluators()
             }
             subtypeManager.activeSubtypeFlow.collectLatestIn(scope) {
+                editorInstance.clearForceComposingBuffer()
                 reevaluateInputShiftState()
                 updateActiveEvaluators()
                 editorInstance.refreshComposing()
@@ -288,12 +289,15 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
     }
 
     fun commitCandidate(candidate: SuggestionCandidate) {
-        scope.launch {
-            candidate.sourceProvider?.notifySuggestionAccepted(subtypeManager.activeSubtype, candidate)
-        }
-        when (candidate) {
+        val subtype = subtypeManager.activeSubtype
+        val privateSession = activeState.isIncognitoMode
+        val committed = when (candidate) {
             is ClipboardSuggestionCandidate -> editorInstance.commitClipboardItem(candidate.clipboardItem)
             else -> editorInstance.commitCompletion(candidate)
+        }
+        if (!committed) return
+        if (!privateSession) scope.launch {
+            candidate.sourceProvider?.notifySuggestionAccepted(subtype, candidate)
         }
         if (candidate is WordSuggestionCandidate && candidate.isNextWordPrediction) {
             // Next-word predictions complete a phrase; commit a trailing space so the
@@ -601,6 +605,8 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
      * Handles a [KeyCode.TOGGLE_INCOGNITO_MODE] event.
      */
     private suspend fun handleToggleIncognitoMode() {
+        editorInstance.clearForceComposingBuffer()
+        nlpManager.clearSuggestions()
         prefs.suggestion.forceIncognitoModeFromDynamic.set(!prefs.suggestion.forceIncognitoModeFromDynamic.get())
         val newState = !activeState.isIncognitoMode
         activeState.isIncognitoMode = newState

@@ -17,7 +17,6 @@
 package dev.patrickgold.florisboard.ime.nlp
 
 import android.content.Context
-import android.os.SystemClock
 import android.util.LruCache
 import androidx.lifecycle.MutableLiveData
 import dev.patrickgold.florisboard.app.FlorisPreferenceStore
@@ -47,6 +46,7 @@ import org.florisboard.lib.kotlin.guardedByLock
 import org.florisboard.lib.kotlin.collectLatestIn
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.properties.Delegates
 
 private const val BLANK_STR_PATTERN = "^\\s*$"
@@ -72,10 +72,11 @@ class NlpManager(context: Context) {
     // lock unnecessary because values constant
     private val providersForceSuggestionOn = mutableMapOf<String, Boolean>()
 
+    private val suggestionRevision = AtomicLong(0)
     private val internalSuggestionsGuard = Mutex()
-    private var internalSuggestions by Delegates.observable(SystemClock.uptimeMillis() to listOf<SuggestionCandidate>()) { _, _, _ ->
-        // Synchronous: key handlers (space/punctuation auto-commit) read activeCandidates
-        // immediately after requesting suggestions and must never see stale candidates.
+    private var internalSuggestions by Delegates.observable(0L to listOf<SuggestionCandidate>()) { _, _, _ ->
+        // Assemble synchronously without reacquiring internalSuggestionsGuard.
+        // Raw auto-correction computes its current word separately at the separator.
         assembleCandidates()
     }
 
@@ -199,26 +200,18 @@ class NlpManager(context: Context) {
             || keyboardManager.activeState.isForceSuggestions
             || providerForcesSuggestionOn(subtypeManager.activeSubtype)
 
+    private fun suggestionContent(content: EditorContent): EditorContent {
+        return if (keyboardManager.activeState.isForceSuggestions && editorInstance.activeInfo.isRawInputEditor) {
+            editorInstance.rawSuggestionContent()
+        } else {
+            content.copy(suggestionSessionId = editorInstance.suggestionSessionId)
+        }
+    }
+
     fun suggest(subtype: Subtype, content: EditorContent) {
-        val reqTime = SystemClock.uptimeMillis()
-        // Raw editors (e.g. Termux) expose no surrounding text, so for force suggestions the
-        // pseudo-composing buffer tracked by the editor instance serves as the composing prefix.
-        val forceBuffer = if (keyboardManager.activeState.isForceSuggestions) {
-            editorInstance.forceComposingText
-        } else {
-            ""
-        }
-        val effectiveContent = if (content.composingText.isBlank() && forceBuffer.isNotBlank()) {
-            EditorContent(
-                text = forceBuffer,
-                offset = 0,
-                localSelection = EditorRange.cursor(forceBuffer.length),
-                localComposing = EditorRange(0, forceBuffer.length),
-                localCurrentWord = EditorRange(0, forceBuffer.length),
-            )
-        } else {
-            content
-        }
+        val revision = suggestionRevision.incrementAndGet()
+        val effectiveContent = suggestionContent(content)
+        val privateSession = keyboardManager.activeState.isIncognitoMode
         scope.launch {
             val emojiSuggestions = when {
                 prefs.emoji.suggestionEnabled.get() -> {
@@ -227,7 +220,7 @@ class NlpManager(context: Context) {
                         content = effectiveContent,
                         maxCandidateCount = prefs.emoji.suggestionCandidateMaxCount.get(),
                         allowPossiblyOffensive = !prefs.suggestion.blockPossiblyOffensive.get(),
-                        isPrivateSession = keyboardManager.activeState.isIncognitoMode,
+                        isPrivateSession = privateSession,
                     )
                 }
                 else -> emptyList()
@@ -242,13 +235,16 @@ class NlpManager(context: Context) {
                         content = effectiveContent,
                         maxCandidateCount = 8,
                         allowPossiblyOffensive = !prefs.suggestion.blockPossiblyOffensive.get(),
-                        isPrivateSession = keyboardManager.activeState.isIncognitoMode,
+                        isPrivateSession = privateSession,
                     )
                 }
             }
             internalSuggestionsGuard.withLock {
-                if (internalSuggestions.first < reqTime) {
-                    internalSuggestions = reqTime to buildList {
+                if (suggestionRevision.get() == revision &&
+                    effectiveContent.suggestionSessionId == editorInstance.suggestionSessionId &&
+                    subtype == subtypeManager.activeSubtype &&
+                    privateSession == keyboardManager.activeState.isIncognitoMode) {
+                    internalSuggestions = revision to buildList {
                         addAll(emojiSuggestions)
                         addAll(suggestions)
                     }
@@ -258,20 +254,30 @@ class NlpManager(context: Context) {
     }
 
     fun suggestDirectly(suggestions: List<SuggestionCandidate>) {
-        val reqTime = SystemClock.uptimeMillis()
+        val revision = suggestionRevision.incrementAndGet()
         runBlocking {
-            internalSuggestions = reqTime to suggestions
+            internalSuggestionsGuard.withLock { internalSuggestions = revision to suggestions }
         }
     }
 
     fun clearSuggestions() {
-        val reqTime = SystemClock.uptimeMillis()
-        runBlocking {
-            internalSuggestions = reqTime to emptyList()
-        }
+        suggestDirectly(emptyList())
     }
 
     fun getAutoCommitCandidate(): SuggestionCandidate? {
+        if (keyboardManager.activeState.isForceSuggestions && editorInstance.activeInfo.isRawInputEditor) {
+            val content = suggestionContent(editorInstance.activeContent)
+            if (content.composingText.isBlank()) return null
+            val subtype = subtypeManager.activeSubtype
+            val privateSession = keyboardManager.activeState.isIncognitoMode
+            // Only the separator path waits for the current raw word. Do not wait on
+            // internalSuggestionsGuard or assemble UI candidates from inside this call.
+            return runBlocking {
+                getSuggestionProvider(subtype).suggest(
+                    subtype, content, 8, !prefs.suggestion.blockPossiblyOffensive.get(), privateSession,
+                ).firstOrNull { it.isEligibleForAutoCommit }
+            }
+        }
         return activeCandidates.firstOrNull { it.isEligibleForAutoCommit }
     }
 

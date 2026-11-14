@@ -34,6 +34,8 @@ data class EditorContent(
     val localSelection: EditorRange,
     val localComposing: EditorRange,
     val localCurrentWord: EditorRange,
+    // Assigned by NlpManager; separates word learning across editor sessions.
+    val suggestionSessionId: Long = 0,
 ) {
     /**
      * The text before the selection as a new string. This may be the whole text before the selection or only a subset,

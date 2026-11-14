@@ -270,7 +270,8 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
                     super.commitText(text)
                 }
             }
-            clearForceComposingBuffer()
+            // Keep the completed word until its separator is typed so raw context
+            // contains the accepted spelling and subsequent backspace still works.
             return committed
         }
         val content = activeContent
@@ -363,6 +364,7 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
      */
     fun deleteBackwards(unit: OperationUnit): Boolean {
         val content = activeContent
+        if (unit != OperationUnit.CHARACTERS && activeInfo.isRawInputEditor) clearForceComposingBuffer()
         if (unit == OperationUnit.CHARACTERS && forceSuggestionsActive() && activeInfo.isRawInputEditor
             && dropLastForceComposingChar()
         ) {
@@ -394,6 +396,7 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
      * @return True on success, false if an error occurred or the input connection is invalid.
      */
     fun deleteForwards(unit: OperationUnit): Boolean {
+        if (activeInfo.isRawInputEditor) clearForceComposingBuffer()
         val content = activeContent
         autoSpace.setInactive()
         phantomSpace.setInactive()

@@ -24,6 +24,7 @@ import dev.patrickgold.florisboard.ime.nlp.SpellingProvider
 import dev.patrickgold.florisboard.ime.nlp.SpellingResult
 import dev.patrickgold.florisboard.ime.nlp.SuggestionCandidate
 import dev.patrickgold.florisboard.ime.nlp.SuggestionProvider
+import dev.patrickgold.florisboard.ime.nlp.WordLearningContext
 import dev.patrickgold.florisboard.ime.nlp.WordSuggestionCandidate
 import dev.patrickgold.florisboard.lib.devtools.flogDebug
 import kotlinx.coroutines.Dispatchers
@@ -50,10 +51,20 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
     private val wordDataSerializer = MapSerializer(String.serializer(), Int.serializer())
     private val ngramStats = NgramStats(appContext)
 
-    // Word preceding the currently shown candidates, used for bigram training.
-    // Not volatile: suggest()/notifySuggestionAccepted() are called from the same NLP scope.
-    private var pendingPrevWord: String? = null
-    private var lastAcceptedWord: String? = null
+    private val learningTracker = WordLearningTracker()
+
+    private fun recordLearning(event: WordLearningContext, reverted: Boolean = false) {
+        learningTracker.record(event, reverted) { delta ->
+            ngramStats.record(event.language, event.previousWord, event.word, delta)
+        }
+    }
+
+    private fun learningContext(
+        lang: String, content: EditorContent, before: String, prev: String?, word: String,
+        isPrivateSession: Boolean,
+    ): WordLearningContext? = WordLearningContext.completed(
+        lang, content.suggestionSessionId, before, content.offset, prev, word, isPrivateSession,
+    )
 
     override val providerId = ProviderId
 
@@ -137,10 +148,9 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
         val rawComposing = content.composingText.trim()
         val composing = rawComposing.lowercase()
         val (prevPrevWord, contentPrevWord) = prevWordsOf(content, rawComposing)
-        // Raw editors (Termux) expose no surrounding text; fall back to the last
-        // accepted word so bigram context still works there.
-        val prevWord = contentPrevWord ?: lastAcceptedWord
-        pendingPrevWord = prevWord
+        // Raw editors receive synthetic surrounding text from the editor buffer.
+        // Never borrow a previous editor's accepted word when context is empty.
+        val prevWord = contentPrevWord
         flogDebug { "suggest: composing='$composing' prev='$prevWord' (fromContent='$contentPrevWord')" }
         if (composing.isBlank() || composing.any { it.isWhitespace() }) {
             // Next-word prediction: only right after an explicit word separator
@@ -150,9 +160,8 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
             if (prevWord != null && separatorTyped) {
                 // Train on normally typed text too: "... A B␣" means the user
                 // typed B after A, not just accepted a candidate.
-                if (prevPrevWord != null && prevPrevWord != prevWord) {
-                    ngramStats.record(lang, prevPrevWord, prevWord, delta = 1)
-                }
+                learningContext(lang, content, before, prevPrevWord, prevWord, isPrivateSession)
+                    ?.let { recordLearning(it) }
                 val predicted = ngramStats.predict(lang, prevWord, maxCandidateCount)
                 if (predicted.isNotEmpty()) {
                     val freqOf = dict.words
@@ -165,12 +174,22 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
                             isEligibleForAutoCommit = false,
                             sourceProvider = this@LatinLanguageProvider,
                             isNextWordPrediction = true,
+                            learningContext = learningContext(
+                                lang, content, before + word, prevWord, word, isPrivateSession,
+                            ),
                         )
                     }
                 }
             }
             return emptyList()
         }
+        val beforeComposing = content.textBeforeSelection.let {
+            if (rawComposing.isNotEmpty() && it.endsWith(rawComposing, ignoreCase = true))
+                it.dropLast(rawComposing.length) else it
+        }
+        fun candidateLearning(word: String) = learningContext(
+            lang, content, beforeComposing + word, prevWord, word, isPrivateSession,
+        )
         val prev = prevWord
         val predictedForPrev = prev?.let { ngramStats.predict(lang, it, 64) } ?: emptyList()
         val matches = prefixMatches(dict, composing, maxCandidateCount * 2)
@@ -203,6 +222,7 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
                     confidence = (1.0 - index * 0.1).coerceAtLeast(0.1),
                     isEligibleForAutoCommit = allowAutoCommit && index == 0,
                     sourceProvider = this@LatinLanguageProvider,
+                    learningContext = candidateLearning(word),
                 )
             }
         }
@@ -216,28 +236,17 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
                 // simply be inserted, never replace the word ("сын," -> "сына").
                 isEligibleForAutoCommit = index == 0 && word.length == composing.length + 1 && !composingIsReliableWord,
                 sourceProvider = this@LatinLanguageProvider,
+                learningContext = candidateLearning(word),
             )
         }
     }
 
     override suspend fun notifySuggestionAccepted(subtype: Subtype, candidate: SuggestionCandidate) {
-        val word = candidate.text.toString().lowercase()
-        val prev = pendingPrevWord ?: lastAcceptedWord
-        if (prev != null && prev != word) {
-            ngramStats.record(subtype.primaryLocale.language, prev, word, delta = 1)
-        }
-        lastAcceptedWord = word
+        (candidate as? WordSuggestionCandidate)?.learningContext?.let { recordLearning(it) }
     }
 
     override suspend fun notifySuggestionReverted(subtype: Subtype, candidate: SuggestionCandidate) {
-        val word = candidate.text.toString().lowercase()
-        val prev = pendingPrevWord ?: lastAcceptedWord
-        if (prev != null && prev != word) {
-            ngramStats.record(subtype.primaryLocale.language, prev, word, delta = -1)
-        }
-        if (lastAcceptedWord == word) {
-            lastAcceptedWord = null
-        }
+        (candidate as? WordSuggestionCandidate)?.learningContext?.let { recordLearning(it, reverted = true) }
     }
 
     override suspend fun removeSuggestion(subtype: Subtype, candidate: SuggestionCandidate): Boolean {

@@ -110,40 +110,46 @@ abstract class AbstractEditorInstance(context: Context) {
 
     // Pseudo-composing buffer for raw editors (e.g. Termux) that expose no surrounding text
     // through their InputConnection. Only tracked while force suggestions are active.
-    private val forceComposingBuffer = StringBuilder()
+    private val forceContext = RawSuggestionContext()
 
     val forceComposingText: String
-        get() = forceComposingBuffer.toString()
+        get() = forceContext.word
 
-    fun clearForceComposingBuffer() {
-        forceComposingBuffer.clear()
+    val suggestionSessionId: Long
+        get() = forceContext.sessionId
+
+    fun clearForceComposingBuffer() = forceContext.clear()
+
+    fun rawSuggestionContent(): EditorContent {
+        val snapshot = forceContext.snapshot()
+        val text = snapshot.before + snapshot.word
+        val composing = if (snapshot.word.isEmpty()) EditorRange.Unspecified else
+            EditorRange(snapshot.before.length, text.length)
+        return EditorContent(
+            text = text,
+            offset = 0,
+            localSelection = EditorRange.cursor(text.length),
+            localComposing = composing,
+            localCurrentWord = composing,
+            suggestionSessionId = snapshot.sessionId,
+        )
     }
 
     private fun trackForceComposingText(text: String) {
         if (!forceSuggestionsActive() || !activeInfo.isRawInputEditor) {
-            forceComposingBuffer.clear()
+            if (forceContext.word.isNotEmpty() || forceContext.before.isNotEmpty()) forceContext.clear()
             return
         }
-        for (char in text) {
-            if (char.isLetterOrDigit() || char == '\'') {
-                forceComposingBuffer.append(char)
-            } else {
-                forceComposingBuffer.clear()
-            }
-        }
+        forceContext.append(text)
     }
 
-    protected fun dropLastForceComposingChar(): Boolean {
-        if (forceComposingBuffer.isEmpty()) return false
-        forceComposingBuffer.deleteAt(forceComposingBuffer.length - 1)
-        return true
-    }
+    protected fun dropLastForceComposingChar(): Boolean = forceContext.backspace()
 
     open fun handleStartInput(editorInfo: FlorisEditorInfo) {
         activeInfo = editorInfo
         activeCursorCapsMode = editorInfo.initialCapsMode
         activeContent = EditorContent.Unspecified
-        forceComposingBuffer.clear()
+        clearForceComposingBuffer()
         currentInputConnection()?.requestCursorUpdates(CursorUpdateAll)
     }
 
@@ -259,7 +265,7 @@ abstract class AbstractEditorInstance(context: Context) {
         activeInfo = FlorisEditorInfo.Unspecified
         activeCursorCapsMode = InputAttributes.CapsMode.NONE
         activeContent = EditorContent.Unspecified
-        forceComposingBuffer.clear()
+        clearForceComposingBuffer()
         runBlocking { expectedContentQueue.clear() }
         _lastCommitPosition.reset()
     }
@@ -677,6 +683,10 @@ abstract class AbstractEditorInstance(context: Context) {
      */
     fun sendDownUpKeyEvent(keyEventCode: Int, metaState: Int = meta(), count: Int = 1): Boolean {
         if (count < 1) return false
+        if (activeInfo.isRawInputEditor && (keyEventCode != KeyEvent.KEYCODE_DEL ||
+                metaState and (KeyEvent.META_CTRL_ON or KeyEvent.META_ALT_ON) != 0)) {
+            clearForceComposingBuffer()
+        }
         val ic = currentInputConnection() ?: return false
         ic.beginBatchEdit()
         val eventTime = SystemClock.uptimeMillis()
