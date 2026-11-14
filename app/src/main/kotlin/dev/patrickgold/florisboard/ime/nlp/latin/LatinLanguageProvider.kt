@@ -201,7 +201,7 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
     }
 
     override suspend fun notifySuggestionAccepted(subtype: Subtype, candidate: SuggestionCandidate) {
-        val word = candidate.text.lowercase()
+        val word = candidate.text.toString().lowercase()
         val prev = pendingPrevWord ?: lastAcceptedWord
         if (prev != null && prev != word) {
             ngramStats.record(subtype.primaryLocale.language, prev, word, delta = 1)
@@ -210,7 +210,7 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
     }
 
     override suspend fun notifySuggestionReverted(subtype: Subtype, candidate: SuggestionCandidate) {
-        val word = candidate.text.lowercase()
+        val word = candidate.text.toString().lowercase()
         val prev = pendingPrevWord ?: lastAcceptedWord
         if (prev != null && prev != word) {
             ngramStats.record(subtype.primaryLocale.language, prev, word, delta = -1)
