@@ -22,6 +22,12 @@
      (`isNextWordPrediction`) коммитится с trailing-пробелом (`KeyboardManager.
      commitCandidate`, phantom-space предварительно гасится). Кандидаты
      префиксного поиска дополнительно бустятся биграммами.
+   - Выгрузка/восстановление модели: при экспорте настроек (чекбокс
+     jetpref datastore) `ngrams_*.json` копируются в архив бэкапа
+     (`files/`), при restore — возвращаются в filesDir
+     (BackupScreen/RestoreScreen). SQLite-хранилище сознательно
+     отложено: JSON достаточен для биграмм; мигрировать при переходе
+     на триграммы/time-decay.
 2. **`app/src/main/assets/ime/dict/ru.json`** — 60 000 самых частотных русских
    слов. Источник: hermitdave/FrequencyWords (частоты OpenSubtitles 2018,
    `content/2018/ru/ru_full.txt`), фильтр `^[а-яё]+$`, частота шкалой 1–255

@@ -59,6 +59,7 @@ import dev.patrickgold.jetpref.datastore.runtime.AndroidAppDataStorage
 import dev.patrickgold.jetpref.datastore.runtime.FileBasedStorage
 import dev.patrickgold.jetpref.datastore.runtime.ImportStrategy
 import dev.patrickgold.jetpref.datastore.ui.Preference
+import java.io.File
 import java.io.FileNotFoundException
 import java.text.DateFormat
 import java.util.*
@@ -155,6 +156,11 @@ fun RestoreScreen() = FlorisScreen {
                 val fileBasedStorage = FileBasedStorage(file.path)
                 FlorisPreferenceStore.import(importStrategy, fileBasedStorage).getOrThrow()
             }
+            // Restore the trained n-gram suggestion model saved alongside settings.
+            // The in-memory copy in the IME process refreshes on next load/typing.
+            workspace.outputDir.subDir("files").listFiles { f ->
+                f.isFile && f.name.startsWith("ngrams_") && f.name.endsWith(".json")
+            }?.forEach { it.copyTo(File(context.filesDir, it.name), overwrite = true) }
         }
         val workspaceFilesDir = workspace.outputDir.subDir("files")
         if (restoreFilesSelector.imeKeyboard) {

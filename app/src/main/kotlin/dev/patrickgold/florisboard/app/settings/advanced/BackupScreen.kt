@@ -180,6 +180,11 @@ fun BackupScreen() = FlorisScreen {
                 .subFile("${FlorisPreferenceModel.NAME}.${AndroidAppDataStorage.JETPREF_FILE_EXT}")
                 .let { FileBasedStorage(it.path) }
             FlorisPreferenceStore.export(fileBasedStorage).getOrThrow()
+            // Include the trained n-gram suggestion model alongside settings
+            val nlpBackupDir = workspace.inputDir.subDir("files")
+            context.filesDir.listFiles { f ->
+                f.isFile && f.name.startsWith("ngrams_") && f.name.endsWith(".json")
+            }?.forEach { it.copyTo(nlpBackupDir.subFile(it.name), overwrite = true) }
         }
         val workspaceFilesDir = workspace.inputDir.subDir("files")
         if (backupFilesSelector.imeKeyboard) {
