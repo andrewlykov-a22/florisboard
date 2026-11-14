@@ -224,7 +224,15 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
         if (matches.isEmpty() && !composingIsValidWord) {
             // Typo with no prefix completions: offer close dictionary words and
             // allow auto-correction on word separators (e.g. "сым" -> "сын").
-            return fuzzyMatches(dict, composing, maxCandidateCount).mapIndexed { index, (word, freq) ->
+            // Bigram context disambiguates equally distant corrections
+            // ("я сым" -> "сын" may win over "сам" if the user writes "я сын...").
+            val fuzzy = fuzzyMatches(dict, composing, maxCandidateCount * 2)
+                .sortedByDescending { (word, freq) ->
+                    val boost = predictedForPrev.indexOf(word).let { if (it < 0) 0 else (predictedForPrev.size - it) * 1000 }
+                    freq + boost
+                }
+                .take(maxCandidateCount)
+            return fuzzy.mapIndexed { index, (word, freq) ->
                 WordSuggestionCandidate(
                     text = word,
                     secondaryText = null,

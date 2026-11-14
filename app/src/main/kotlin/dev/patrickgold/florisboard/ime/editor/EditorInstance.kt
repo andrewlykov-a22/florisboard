@@ -253,15 +253,17 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
         if (text.isEmpty()) return false
         if (activeInfo.isRawInputEditor) {
             // Raw editors (e.g. Termux) have no composing region; the typed prefix was already
-            // sent to the editor, so only commit the missing suffix of the accepted candidate.
+            // sent to the editor, so normally only the missing suffix is committed. For fuzzy
+            // corrections the candidate does not start with the prefix, so the typed word must
+            // be erased in the terminal first (DEL chars), then the correction committed whole.
             if (!forceSuggestionsActive()) return false
             val prefix = forceComposingText
-            val suffix = when {
-                prefix.isEmpty() -> text
-                text.length >= prefix.length && text.startsWith(prefix, ignoreCase = true) -> text.substring(prefix.length)
-                else -> text
+            val committed = when {
+                prefix.isEmpty() -> super.commitText(text)
+                text.length >= prefix.length && text.startsWith(prefix, ignoreCase = true) ->
+                    text.substring(prefix.length).isEmpty() || super.commitText(text.substring(prefix.length))
+                else -> super.commitText("\u007F".repeat(prefix.length)) && super.commitText(text)
             }
-            val committed = suffix.isEmpty() || super.commitText(suffix)
             clearForceComposingBuffer()
             return committed
         }
