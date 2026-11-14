@@ -122,12 +122,16 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
         }
     }
 
-    private fun prevWordOf(content: EditorContent, composing: String): String? {
+    /** Returns the last two words before the composing region, most recent last. */
+    private fun prevWordsOf(content: EditorContent, composing: String): Pair<String?, String?> {
         var before = content.textBeforeSelection
         if (composing.isNotEmpty() && before.endsWith(composing, ignoreCase = true)) {
             before = before.substring(0, before.length - composing.length)
         }
-        return Regex("[\\p{L}\\p{N}]+").findAll(before).lastOrNull()?.value?.lowercase()
+        val words = Regex("[\\p{L}\\p{N}]+").findAll(before).map { it.value.lowercase() }.toList()
+        val prev = words.lastOrNull()
+        val prevPrev = words.dropLast(1).lastOrNull()
+        return prevPrev to prev
     }
 
     override suspend fun suggest(
@@ -141,7 +145,7 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
         val dict = dicts.withLock { it[lang] } ?: return emptyList()
         val rawComposing = content.composingText.trim()
         val composing = rawComposing.lowercase()
-        val prevWord = prevWordOf(content, rawComposing)
+        val (prevPrevWord, prevWord) = prevWordsOf(content, rawComposing)
         pendingPrevWord = prevWord
         if (composing.isBlank() || composing.any { it.isWhitespace() }) {
             // Next-word prediction: only right after an explicit word separator
@@ -149,6 +153,11 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
             val before = content.textBeforeSelection
             val separatorTyped = before.isNotEmpty() && !before.last().isLetterOrDigit()
             if (prevWord != null && separatorTyped) {
+                // Train on normally typed text too: "... A B␣" means the user
+                // typed B after A, not just accepted a candidate.
+                if (prevPrevWord != null && prevPrevWord != prevWord) {
+                    ngramStats.record(lang, prevPrevWord, prevWord, delta = 1)
+                }
                 val predicted = ngramStats.predict(lang, prevWord, maxCandidateCount)
                 if (predicted.isNotEmpty()) {
                     val freqOf = dict.words
@@ -160,6 +169,7 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
                             confidence = (0.6 - index * 0.05).coerceAtLeast(0.1),
                             isEligibleForAutoCommit = false,
                             sourceProvider = this@LatinLanguageProvider,
+                            isNextWordPrediction = true,
                         )
                     }
                 }

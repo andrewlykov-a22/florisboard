@@ -47,6 +47,7 @@ import dev.patrickgold.florisboard.ime.input.InputShiftState
 import dev.patrickgold.florisboard.ime.nlp.ClipboardSuggestionCandidate
 import dev.patrickgold.florisboard.ime.nlp.PunctuationRule
 import dev.patrickgold.florisboard.ime.nlp.SuggestionCandidate
+import dev.patrickgold.florisboard.ime.nlp.WordSuggestionCandidate
 import dev.patrickgold.florisboard.ime.onehanded.OneHandedMode
 import dev.patrickgold.florisboard.ime.popup.PopupMappingComponent
 import dev.patrickgold.florisboard.ime.text.composing.Composer
@@ -293,6 +294,12 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
         when (candidate) {
             is ClipboardSuggestionCandidate -> editorInstance.commitClipboardItem(candidate.clipboardItem)
             else -> editorInstance.commitCompletion(candidate)
+        }
+        if (candidate is WordSuggestionCandidate && candidate.isNextWordPrediction) {
+            // Next-word predictions complete a phrase; commit a trailing space so the
+            // user can continue typing immediately (no phantom space, no double space).
+            editorInstance.phantomSpace.setInactive()
+            editorInstance.commitText(" ")
         }
         if (activeState.isForceSuggestions) {
             resetSuggestions(editorInstance.activeContent)

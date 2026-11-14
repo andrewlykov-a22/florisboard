@@ -111,6 +111,9 @@ data class WordSuggestionCandidate(
     override val isEligibleForAutoCommit: Boolean = false,
     override val isEligibleForUserRemoval: Boolean = true,
     override val sourceProvider: SuggestionProvider? = null,
+    /** If true, this candidate is a next-word prediction (no composing text) and a space
+     *  should be committed right after it. */
+    val isNextWordPrediction: Boolean = false,
 ) : SuggestionCandidate {
     override val icon: ImageVector? = null
 }
