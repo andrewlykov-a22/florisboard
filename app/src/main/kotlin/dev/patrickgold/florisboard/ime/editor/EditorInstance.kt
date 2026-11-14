@@ -262,7 +262,13 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
                 prefix.isEmpty() -> super.commitText(text)
                 text.length >= prefix.length && text.startsWith(prefix, ignoreCase = true) ->
                     text.substring(prefix.length).isEmpty() || super.commitText(text.substring(prefix.length))
-                else -> super.commitText("\u007F".repeat(prefix.length)) && super.commitText(text)
+                else -> {
+                    // Correction replaces the typed word: Termux only honors KEYCODE_DEL
+                    // key events (not DEL chars in commitText), so erase via the same
+                    // path as backspace; deleteBackwards also drains the force buffer.
+                    repeat(prefix.length) { deleteBackwards(OperationUnit.CHARACTERS) }
+                    super.commitText(text)
+                }
             }
             clearForceComposingBuffer()
             return committed

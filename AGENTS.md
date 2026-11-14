@@ -71,14 +71,9 @@
 
 ## Известные проблемы и решения
 
-- **Fuzzy-замена в Termux не стирает набранное**: в `commitCompletion` (raw-режим)
-  стирание идёт через `commitText("\u007F")`, но Termux игнорирует DEL-символ
-  в commitText (он понимает только KEYCODE_DEL key events). Поэтому при приёме
-  fuzzy-кандидата суффикс/слово вставляется, а старое не удаляется. Бэкспейс
-  работает, т.к. идёт через `sendDownUpKeyEvent(KEYCODE_DEL)`. Фикс (не сделан):
-  в raw-ветке `commitCompletion` вместо commitText(DEL) вызывать
-  `repeat(prefix.length) { deleteBackwards(OperationUnit.CHARACTERS) }` — это
-  шлёт настоящие key events и параллельно очищает forceComposingBuffer.
+- **Fuzzy-замена в Termux**: исправлено — стирание набранного слова при приёме
+  fuzzy-кандидата идёт через `deleteBackwards(CHARACTERS)` (key events KEYCODE_DEL),
+  т.к. Termux игнорирует DEL-символы в commitText.
 - **Биты KeyboardState заняты регионами**: `KeyboardState.rawValue` — битовое поле, где
   биты 24–26 — это регион `ImeUiMode`, бит 27 — RTL. Первый вариант флага
   `F_IS_FORCE_SUGGESTIONS` стоял на бите 24 и при включении тоггла переключал всю
