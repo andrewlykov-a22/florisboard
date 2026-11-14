@@ -23,7 +23,7 @@ jobs:
       - name: Set up CMake and Ninja
         uses: lukka/get-cmake@v4.0.2
       - name: Run unit tests
-        run: ./gradlew testDebugUnitTest
+        run: ./gradlew :app:testDebugUnitTest
       - name: Build with Gradle
         run: ./gradlew clean assembleDebug
       - uses: actions/upload-artifact@v4
