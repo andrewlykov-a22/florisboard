@@ -136,8 +136,12 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
         val dict = dicts.withLock { it[lang] } ?: return emptyList()
         val rawComposing = content.composingText.trim()
         val composing = rawComposing.lowercase()
-        val (prevPrevWord, prevWord) = prevWordsOf(content, rawComposing)
+        val (prevPrevWord, contentPrevWord) = prevWordsOf(content, rawComposing)
+        // Raw editors (Termux) expose no surrounding text; fall back to the last
+        // accepted word so bigram context still works there.
+        val prevWord = contentPrevWord ?: lastAcceptedWord
         pendingPrevWord = prevWord
+        flogDebug { "suggest: composing='$composing' prev='$prevWord' (fromContent='$contentPrevWord')" }
         if (composing.isBlank() || composing.any { it.isWhitespace() }) {
             // Next-word prediction: only right after an explicit word separator
             // (space/punctuation), which is the user's clear "new word" marker.
@@ -188,6 +192,10 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
                 }
                 .take(maxCandidateCount)
             val allowAutoCommit = LatinSuggestionAlgorithms.isFuzzyAutoCommitAllowed(fuzzy, predictedForPrev)
+            flogDebug {
+                "fuzzy: composing='$composing' candidates=${fuzzy.map { "${it.first}(d${it.third},f${it.second})" }} " +
+                    "predictedForPrev=$predictedForPrev allowAutoCommit=$allowAutoCommit"
+            }
             return fuzzy.mapIndexed { index, (word, freq, dist) ->
                 WordSuggestionCandidate(
                     text = word,

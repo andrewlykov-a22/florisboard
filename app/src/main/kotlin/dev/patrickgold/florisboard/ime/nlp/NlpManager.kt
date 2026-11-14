@@ -74,7 +74,9 @@ class NlpManager(context: Context) {
 
     private val internalSuggestionsGuard = Mutex()
     private var internalSuggestions by Delegates.observable(SystemClock.uptimeMillis() to listOf<SuggestionCandidate>()) { _, _, _ ->
-        scope.launch { assembleCandidates() }
+        // Synchronous: key handlers (space/punctuation auto-commit) read activeCandidates
+        // immediately after requesting suggestions and must never see stale candidates.
+        assembleCandidates()
     }
 
     private val _activeCandidatesFlow = MutableStateFlow(listOf<SuggestionCandidate>())
