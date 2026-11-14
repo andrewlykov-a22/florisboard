@@ -53,11 +53,22 @@ class LatinSuggestionAlgorithmsTest {
     }
 
     @Test
-    fun `fuzzy allows distance two for words of five letters and more`() {
-        val dict = dictOf("привет" to 100, "привязь" to 10)
-        val matches = LatinSuggestionAlgorithms.fuzzyMatches(dict, "привит", 10).map { it.first }
-        assertTrue("привет" in matches)
-        assertFalse("привязь" in matches) // distance 3
+    fun `fuzzy allows distance two for words of three letters and more`() {
+        val dict = dictOf("привет" to 100, "привязь" to 10, "сын" to 200, "сяо" to 149)
+        val longMatches = LatinSuggestionAlgorithms.fuzzyMatches(dict, "привит", 10).map { it.first }
+        assertTrue("привет" in longMatches)
+        assertFalse("привязь" in longMatches) // distance 3
+        val shortMatches = LatinSuggestionAlgorithms.fuzzyMatches(dict, "ссы", 10).map { it.first }
+        assertTrue("сын" in shortMatches) // distance 2, now reachable for 3-letter words
+    }
+
+    @Test
+    fun `reliable word requires minimum frequency`() {
+        val dict = dictOf("сын" to 253, "ссы" to 43, "мой" to 255)
+        assertTrue(LatinSuggestionAlgorithms.isReliableWord(dict, "сын"))
+        assertTrue(LatinSuggestionAlgorithms.isReliableWord(dict, "мой"))
+        assertFalse(LatinSuggestionAlgorithms.isReliableWord(dict, "ссы")) // rare word stays correctable
+        assertFalse(LatinSuggestionAlgorithms.isReliableWord(dict, "совсемнет"))
     }
 
     @Test

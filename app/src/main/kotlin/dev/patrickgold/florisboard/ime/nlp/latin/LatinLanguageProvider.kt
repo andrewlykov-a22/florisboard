@@ -176,8 +176,8 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
                 freq + boost
             }
             .take(maxCandidateCount)
-        val composingIsValidWord = dict.words.containsKey(composing)
-        if (matches.isEmpty() && !composingIsValidWord) {
+        val composingIsReliableWord = LatinSuggestionAlgorithms.isReliableWord(dict.words, composing)
+        if (matches.isEmpty() && !composingIsReliableWord) {
             // Typo with no prefix completions: offer close dictionary words. Auto-commit
             // only with independent evidence (bigram with prev word, single match, or a
             // distance margin over the runner-up) — ambiguous ties like "сым" -> "сам"/
@@ -206,7 +206,7 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
                 // Auto-commit may only correct a typo (a word not in the dictionary).
                 // If the user typed a complete valid word, space/punctuation must
                 // simply be inserted, never replace the word ("сын," -> "сына").
-                isEligibleForAutoCommit = index == 0 && word.length == composing.length + 1 && !composingIsValidWord,
+                isEligibleForAutoCommit = index == 0 && word.length == composing.length + 1 && !composingIsReliableWord,
                 sourceProvider = this@LatinLanguageProvider,
             )
         }

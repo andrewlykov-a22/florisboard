@@ -60,7 +60,7 @@ object LatinSuggestionAlgorithms {
     /** Best fuzzy candidates with their edit distance, best first. */
     fun fuzzyMatchesWithDistance(words: TreeMap<String, Int>, word: String, limit: Int): List<Triple<String, Int, Int>> {
         if (word.isBlank()) return emptyList()
-        val maxDist = if (word.length >= 5) 2 else 1
+        val maxDist = if (word.length >= 3) 2 else 1
         val first = word.first()
         val result = ArrayList<Triple<String, Int, Int>>()
         for ((candidate, freq) in words.tailMap(first.toString())) {
@@ -74,6 +74,14 @@ object LatinSuggestionAlgorithms {
         result.sortWith(compareByDescending<Triple<String, Int, Int>> { it.second }.thenBy { it.third })
         return result.take(limit)
     }
+
+    /**
+     * A composing word counts as valid (and thus protected from auto-correction) only
+     * if it is a reasonably frequent dictionary word. Rare dictionary artifacts like
+     * «ссы» stay correctable — the evidence gate still guards ambiguous cases.
+     */
+    fun isReliableWord(words: TreeMap<String, Int>, word: String, minFreq: Int = 48): Boolean =
+        (words[word] ?: 0) >= minFreq
 
     /** Words close to [word] by edit distance (same first letter, similar length). */
     fun fuzzyMatches(words: TreeMap<String, Int>, word: String, limit: Int): List<Pair<String, Int>> =
