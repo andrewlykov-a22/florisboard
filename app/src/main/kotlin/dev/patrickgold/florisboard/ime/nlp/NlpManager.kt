@@ -309,11 +309,10 @@ class NlpManager(context: Context) {
                         allowPossiblyOffensive = !prefs.suggestion.blockPossiblyOffensive.get(),
                         isPrivateSession = keyboardManager.activeState.isIncognitoMode,
                     ).ifEmpty {
-                        buildList {
-                            internalSuggestionsGuard.withLock {
-                                addAll(internalSuggestions.second)
-                            }
-                        }
+                        // Read without the guard: this method is invoked synchronously from the
+                        // internalSuggestions observer, which fires while suggest() may still hold
+                        // the guard — a second withLock here would deadlock (Mutex is not reentrant).
+                        internalSuggestions.second
                     }
                 }
                 else -> emptyList()
