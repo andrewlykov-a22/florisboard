@@ -449,6 +449,11 @@ abstract class AbstractEditorInstance(context: Context) {
             ic.setComposingRegion(newContent.composing)
         }
         ic.endBatchEdit()
+        // Raw editors do not report selection updates, so the activeContentFlow never emits
+        // and suggestions would not refresh; trigger the suggestion pass directly.
+        if (forceSuggestionsActive() && activeInfo.isRawInputEditor) {
+            keyboardManager.resetSuggestions(activeContent)
+        }
         return true
     }
 
