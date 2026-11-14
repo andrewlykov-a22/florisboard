@@ -103,15 +103,47 @@ abstract class AbstractEditorInstance(context: Context) {
 
     private fun currentInputConnection() = FlorisImeService.currentInputConnection()
 
-    private fun forceSuggestionsActive() = keyboardManager.activeState.isForceSuggestions
+    protected fun forceSuggestionsActive() = keyboardManager.activeState.isForceSuggestions
 
     private fun isRawInputForSuggestions(editorInfo: FlorisEditorInfo) =
         editorInfo.isRawInputEditor && !forceSuggestionsActive()
+
+    // Pseudo-composing buffer for raw editors (e.g. Termux) that expose no surrounding text
+    // through their InputConnection. Only tracked while force suggestions are active.
+    private val forceComposingBuffer = StringBuilder()
+
+    val forceComposingText: String
+        get() = forceComposingBuffer.toString()
+
+    fun clearForceComposingBuffer() {
+        forceComposingBuffer.clear()
+    }
+
+    private fun trackForceComposingText(text: String) {
+        if (!forceSuggestionsActive() || !activeInfo.isRawInputEditor) {
+            forceComposingBuffer.clear()
+            return
+        }
+        for (char in text) {
+            if (char.isLetterOrDigit() || char == '\'') {
+                forceComposingBuffer.append(char)
+            } else {
+                forceComposingBuffer.clear()
+            }
+        }
+    }
+
+    protected fun dropLastForceComposingChar(): Boolean {
+        if (forceComposingBuffer.isEmpty()) return false
+        forceComposingBuffer.deleteAt(forceComposingBuffer.length - 1)
+        return true
+    }
 
     open fun handleStartInput(editorInfo: FlorisEditorInfo) {
         activeInfo = editorInfo
         activeCursorCapsMode = editorInfo.initialCapsMode
         activeContent = EditorContent.Unspecified
+        forceComposingBuffer.clear()
         currentInputConnection()?.requestCursorUpdates(CursorUpdateAll)
     }
 
@@ -227,6 +259,7 @@ abstract class AbstractEditorInstance(context: Context) {
         activeInfo = FlorisEditorInfo.Unspecified
         activeCursorCapsMode = InputAttributes.CapsMode.NONE
         activeContent = EditorContent.Unspecified
+        forceComposingBuffer.clear()
         runBlocking { expectedContentQueue.clear() }
         _lastCommitPosition.reset()
     }
@@ -394,6 +427,7 @@ abstract class AbstractEditorInstance(context: Context) {
 
     private fun commitTextInternal(text: String): Boolean {
         val ic = currentInputConnection() ?: return false
+        trackForceComposingText(text)
         val content = activeContent
         val selection = content.selection
         ic.beginBatchEdit()

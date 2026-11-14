@@ -294,6 +294,9 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
             is ClipboardSuggestionCandidate -> editorInstance.commitClipboardItem(candidate.clipboardItem)
             else -> editorInstance.commitCompletion(candidate)
         }
+        if (activeState.isForceSuggestions) {
+            resetSuggestions(editorInstance.activeContent)
+        }
     }
 
     fun commitGesture(word: String) {
@@ -429,6 +432,9 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
         }
         revertPreviouslyAcceptedCandidate()
         editorInstance.deleteBackwards(unit)
+        if (activeState.isForceSuggestions) {
+            resetSuggestions(editorInstance.activeContent)
+        }
     }
 
     /**
@@ -450,6 +456,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
     private fun handleEnter() {
         val info = editorInstance.activeInfo
         val isShiftPressed = inputEventDispatcher.isPressed(KeyCode.SHIFT)
+        editorInstance.clearForceComposingBuffer()
         if (editorInstance.tryPerformEnterCommitRaw()) {
             return
         }
@@ -623,6 +630,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
         val newState = !prefs.suggestion.forceEnabled.get()
         prefs.suggestion.forceEnabled.set(newState)
         activeState.isForceSuggestions = newState
+        editorInstance.clearForceComposingBuffer()
         lastToastReference.get()?.cancel()
         lastToastReference = WeakReference(
             appContext.showLongToast(

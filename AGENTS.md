@@ -30,7 +30,14 @@
    drawable `ic_force_suggestions.xml` (material-icons-extended в новом compose-bom
    частично недоступен), строки `force_suggestions__*` и
    `quick_action__toggle_force_suggestions*` в strings.xml, стандартный набор —
-   QuickActionArrangement.Default.
+   QuickActionArrangement.Default. **Pseudo-composing буфер** (raw-редакторы типа Termux
+   отдают пустой `BaseInputConnection`, окружающего текста нет): `AbstractEditorInstance`
+   накапливает введённые буквы/цифры в `forceComposingBuffer` (пробел/enter/прочие
+   символы сбрасывают, backspace убирает последний и дублирует DEL в редактор),
+   `NlpManager.suggest()` подставляет буфер как composing-префикс, приёми кандидата
+   (`commitCompletion`) коммитит только суффикс слова (префикс уже отправлен в терминал).
+   `imeUiMode` сбрасывается в `TEXT` при `handleStartInputView`, чтобы медиа-панель
+   не «прилипала» между активациями клавиатуры.
 7. CI: `.github/workflows/russian-suggestions.yml` — `assembleDebug` при push в
    ветку; артефакт `app-debug.apk`. Сборка debug, т.к. release требует
    подписи (секреты), а debug устанавливается рядом с официальным приложением
@@ -59,6 +66,25 @@
   конфликтов нет.
 - Сайт аддонов FlorisBoard (`addons.florisboard.org`) с устройства не
   разрешается DNS — словарь был сгенерирован из открытых источников.
+
+## Релизный процесс
+
+Порядок обязателен, сломанные или непроверенные сборки в релизах не публикуются:
+
+1. Правки в коде → commit → push в `feature/russian-suggestions`.
+2. CI (`russian-suggestions.yml`) собирает `app-debug.apk` (~7–10 мин). Дождаться зелёного
+   статуса workflow — красная сборка не берётся.
+3. Скачать артефакт только после явного согласия пользователя, установка — `termux-open`
+   (системный установщик, подтверждение пользователем).
+4. Проверка на устройстве: подсказки в Termux с включённым force (набор → кандидаты →
+   приём кандидата), обычный ввод в rich-поле, отсутствие «прилипшей» медиа-панели.
+5. Только после проверки: аннотированный тег `v<versionName>-r<N>` (пример: `v0.5.3-r1`)
+   на коммите прошедшей проверку сборки + GitHub Release через `gh release create` с:
+   - заголовком `FlorisBoard fork <versionName> r<N>`;
+   - changelog: разделы «Исправлено» и «Доработано» (кратко, по-русски, ссылками на
+     поведение, а не на файлы);
+   - приложенным проверенным `app-debug.apk`.
+6. versionCode поднимается на единицу при каждой публикации (gradle.properties).
 
 ## Как обновлять словарь
 

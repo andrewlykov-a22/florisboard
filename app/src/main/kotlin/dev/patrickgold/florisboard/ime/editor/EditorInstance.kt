@@ -108,6 +108,7 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
             }
         }
         activeState.keyboardMode = keyboardMode
+        activeState.imeUiMode = ImeUiMode.TEXT
         activeState.isForceSuggestions = prefs.suggestion.forceEnabled.get()
         activeState.isComposingEnabled = when (keyboardMode) {
             KeyboardMode.NUMERIC,
@@ -250,7 +251,21 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
      */
     fun commitCompletion(candidate: SuggestionCandidate): Boolean {
         val text = candidate.text.toString()
-        if (text.isEmpty() || activeInfo.isRawInputEditor) return false
+        if (text.isEmpty()) return false
+        if (activeInfo.isRawInputEditor) {
+            // Raw editors (e.g. Termux) have no composing region; the typed prefix was already
+            // sent to the editor, so only commit the missing suffix of the accepted candidate.
+            if (!forceSuggestionsActive()) return false
+            val prefix = forceComposingText
+            val suffix = when {
+                prefix.isEmpty() -> text
+                text.length >= prefix.length && text.startsWith(prefix, ignoreCase = true) -> text.substring(prefix.length)
+                else -> text
+            }
+            val committed = suffix.isEmpty() || super.commitText(suffix)
+            clearForceComposingBuffer()
+            return committed
+        }
         val content = activeContent
         return if (content.composing.isValid) {
             phantomSpace.setActive(showComposingRegion = false, candidate = candidate)
@@ -341,6 +356,15 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
      */
     fun deleteBackwards(unit: OperationUnit): Boolean {
         val content = activeContent
+        if (unit == OperationUnit.CHARACTERS && forceSuggestionsActive() && activeInfo.isRawInputEditor
+            && dropLastForceComposingChar()
+        ) {
+            // A tracked pseudo-composing char was dropped; mirror the backspace to the raw editor
+            autoSpace.setInactive()
+            phantomSpace.setInactive()
+            sendDownUpKeyEvent(KeyEvent.KEYCODE_DEL)
+            return true
+        }
         if (unit == OperationUnit.CHARACTERS) {
             if (phantomSpace.isActive && content.currentWord.isValid && prefs.glide.immediateBackspaceDeletesWord.get()) {
                 return deleteBackwards(OperationUnit.WORDS)

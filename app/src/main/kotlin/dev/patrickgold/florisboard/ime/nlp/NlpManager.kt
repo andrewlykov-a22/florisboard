@@ -199,12 +199,30 @@ class NlpManager(context: Context) {
 
     fun suggest(subtype: Subtype, content: EditorContent) {
         val reqTime = SystemClock.uptimeMillis()
+        // Raw editors (e.g. Termux) expose no surrounding text, so for force suggestions the
+        // pseudo-composing buffer tracked by the editor instance serves as the composing prefix.
+        val forceBuffer = if (keyboardManager.activeState.isForceSuggestions) {
+            editorInstance.forceComposingText
+        } else {
+            ""
+        }
+        val effectiveContent = if (content.composingText.isBlank() && forceBuffer.isNotBlank()) {
+            EditorContent(
+                text = forceBuffer,
+                offset = 0,
+                localSelection = EditorRange.cursor(forceBuffer.length),
+                localComposing = EditorRange(0, forceBuffer.length),
+                localCurrentWord = EditorRange(0, forceBuffer.length),
+            )
+        } else {
+            content
+        }
         scope.launch {
             val emojiSuggestions = when {
                 prefs.emoji.suggestionEnabled.get() -> {
                     emojiSuggestionProvider.suggest(
                         subtype = subtype,
-                        content = content,
+                        content = effectiveContent,
                         maxCandidateCount = prefs.emoji.suggestionCandidateMaxCount.get(),
                         allowPossiblyOffensive = !prefs.suggestion.blockPossiblyOffensive.get(),
                         isPrivateSession = keyboardManager.activeState.isIncognitoMode,
@@ -219,7 +237,7 @@ class NlpManager(context: Context) {
                 else -> {
                     getSuggestionProvider(subtype).suggest(
                         subtype = subtype,
-                        content = content,
+                        content = effectiveContent,
                         maxCandidateCount = 8,
                         allowPossiblyOffensive = !prefs.suggestion.blockPossiblyOffensive.get(),
                         isPrivateSession = keyboardManager.activeState.isIncognitoMode,
