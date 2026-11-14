@@ -31,6 +31,11 @@
      (BackupScreen/RestoreScreen). SQLite-хранилище сознательно
      отложено: JSON достаточен для биграмм; мигрировать при переходе
      на триграммы/time-decay.
+   - Чистые алгоритмы вынесены в `LatinSuggestionAlgorithms` (без Android-зависимостей),
+     юнит-тесты `LatinSuggestionAlgorithmsTest` (JUnit5), CI гоняет
+     `testDebugUnitTest` и падает при красных тестах. Fuzzy-кандидат
+     авто-коммитится только при подтверждении (биграмма с предыдущим
+     словом или единственный вариант), иначе — только показ в панели.
 2. **`app/src/main/assets/ime/dict/ru.json`** — 60 000 самых частотных русских
    слов. Источник: hermitdave/FrequencyWords (частоты OpenSubtitles 2018,
    `content/2018/ru/ru_full.txt`), фильтр `^[а-яё]+$`, частота шкалой 1–255
