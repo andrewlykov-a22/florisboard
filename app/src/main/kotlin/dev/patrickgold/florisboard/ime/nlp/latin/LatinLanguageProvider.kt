@@ -48,6 +48,12 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
 
     private val dicts = guardedByLock { mutableMapOf<String, DictEntry>() }
     private val wordDataSerializer = MapSerializer(String.serializer(), Int.serializer())
+    private val ngramStats = NgramStats(appContext)
+
+    // Word preceding the currently shown candidates, used for bigram training.
+    // Not volatile: suggest()/notifySuggestionAccepted() are called from the same NLP scope.
+    private var pendingPrevWord: String? = null
+    private var lastAcceptedWord: String? = null
 
     override val providerId = ProviderId
 
@@ -116,6 +122,14 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
         }
     }
 
+    private fun prevWordOf(content: EditorContent, composing: String): String? {
+        var before = content.textBeforeSelection
+        if (composing.isNotEmpty() && before.endsWith(composing, ignoreCase = true)) {
+            before = before.substring(0, before.length - composing.length)
+        }
+        return Regex("[\\p{L}\\p{N}]+").findAll(before).lastOrNull()?.value?.lowercase()
+    }
+
     override suspend fun suggest(
         subtype: Subtype,
         content: EditorContent,
@@ -125,26 +139,75 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
     ): List<SuggestionCandidate> {
         val lang = subtype.primaryLocale.language
         val dict = dicts.withLock { it[lang] } ?: return emptyList()
-        val composing = content.composingText.trim().lowercase()
-        if (composing.isBlank() || composing.any { it.isWhitespace() }) return emptyList()
-        val matches = prefixMatches(dict, composing, maxCandidateCount)
+        val rawComposing = content.composingText.trim()
+        val composing = rawComposing.lowercase()
+        val prevWord = prevWordOf(content, rawComposing)
+        pendingPrevWord = prevWord
+        if (composing.isBlank() || composing.any { it.isWhitespace() }) {
+            // Next-word prediction: only right after an explicit word separator
+            // (space/punctuation), which is the user's clear "new word" marker.
+            val before = content.textBeforeSelection
+            val separatorTyped = before.isNotEmpty() && !before.last().isLetterOrDigit()
+            if (prevWord != null && separatorTyped) {
+                val predicted = ngramStats.predict(lang, prevWord, maxCandidateCount)
+                if (predicted.isNotEmpty()) {
+                    val freqOf = dict.words
+                    val sorted = predicted.sortedByDescending { freqOf[it] ?: 0 }
+                    return sorted.mapIndexed { index, word ->
+                        WordSuggestionCandidate(
+                            text = word,
+                            secondaryText = null,
+                            confidence = (0.6 - index * 0.05).coerceAtLeast(0.1),
+                            isEligibleForAutoCommit = false,
+                            sourceProvider = this@LatinLanguageProvider,
+                        )
+                    }
+                }
+            }
+            return emptyList()
+        }
+        val prev = prevWord
+        val predictedForPrev = prev?.let { ngramStats.predict(lang, it, 64) } ?: emptyList()
+        val matches = prefixMatches(dict, composing, maxCandidateCount * 2)
+            .sortedByDescending { (word, freq) ->
+                // Boost words the user has previously chosen after this predecessor
+                val boost = predictedForPrev.indexOf(word).let { if (it < 0) 0 else (predictedForPrev.size - it) * 1000 }
+                freq + boost
+            }
+            .take(maxCandidateCount)
+        val composingIsValidWord = dict.words.containsKey(composing)
         return matches.mapIndexed { index, (word, freq) ->
             WordSuggestionCandidate(
                 text = word,
                 secondaryText = null,
                 confidence = (1.0 - index * 0.05).coerceAtLeast(0.1),
-                isEligibleForAutoCommit = index == 0 && word.length == composing.length + 1,
+                // Auto-commit may only correct a typo (a word not in the dictionary).
+                // If the user typed a complete valid word, space/punctuation must
+                // simply be inserted, never replace the word ("сын," -> "сына").
+                isEligibleForAutoCommit = index == 0 && word.length == composing.length + 1 && !composingIsValidWord,
                 sourceProvider = this@LatinLanguageProvider,
             )
         }
     }
 
     override suspend fun notifySuggestionAccepted(subtype: Subtype, candidate: SuggestionCandidate) {
-        flogDebug { candidate.toString() }
+        val word = candidate.text.lowercase()
+        val prev = pendingPrevWord ?: lastAcceptedWord
+        if (prev != null && prev != word) {
+            ngramStats.record(subtype.primaryLocale.language, prev, word, delta = 1)
+        }
+        lastAcceptedWord = word
     }
 
     override suspend fun notifySuggestionReverted(subtype: Subtype, candidate: SuggestionCandidate) {
-        flogDebug { candidate.toString() }
+        val word = candidate.text.lowercase()
+        val prev = pendingPrevWord ?: lastAcceptedWord
+        if (prev != null && prev != word) {
+            ngramStats.record(subtype.primaryLocale.language, prev, word, delta = -1)
+        }
+        if (lastAcceptedWord == word) {
+            lastAcceptedWord = null
+        }
     }
 
     override suspend fun removeSuggestion(subtype: Subtype, candidate: SuggestionCandidate): Boolean {
