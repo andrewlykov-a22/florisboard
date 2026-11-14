@@ -108,7 +108,6 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
             }
         }
         activeState.keyboardMode = keyboardMode
-        activeState.imeUiMode = ImeUiMode.TEXT
         activeState.isForceSuggestions = prefs.suggestion.forceEnabled.get()
         activeState.isComposingEnabled = when (keyboardMode) {
             KeyboardMode.NUMERIC,

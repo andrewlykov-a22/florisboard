@@ -87,9 +87,12 @@ open class KeyboardState protected constructor(open var rawValue: ULong) {
         const val F_IS_COMPOSING_ENABLED: ULong =           0x00100000u
 
         const val F_IS_CHAR_HALF_WIDTH: ULong =             0x00200000u
-        const val F_IS_FORCE_SUGGESTIONS: ULong =           0x01000000u
         const val F_IS_KANA_KATA: ULong =                   0x00400000u
         const val F_IS_KANA_SMALL: ULong =                  0x00800000u
+
+        // Note: bits 24-26 are the ImeUiMode region, 0x08000000 is RTL direction.
+        // This flag must use bit 28 (0x10000000) to avoid corrupting ImeUiMode.
+        const val F_IS_FORCE_SUGGESTIONS: ULong =           0x10000000u
 
         const val F_IS_RTL_LAYOUT_DIRECTION: ULong =        0x08000000u
 
