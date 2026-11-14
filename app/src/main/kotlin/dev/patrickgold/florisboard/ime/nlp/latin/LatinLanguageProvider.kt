@@ -99,6 +99,41 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
         return result.take(limit)
     }
 
+    private fun levenshtein(a: String, b: String): Int {
+        if (a == b) return 0
+        var prev = IntArray(b.length + 1) { it }
+        var curr = IntArray(b.length + 1)
+        for (i in 1..a.length) {
+            curr[0] = i
+            for (j in 1..b.length) {
+                curr[j] = minOf(
+                    prev[j] + 1,
+                    curr[j - 1] + 1,
+                    prev[j - 1] + if (a[i - 1] == b[j - 1]) 0 else 1,
+                )
+            }
+            val tmp = prev; prev = curr; curr = tmp
+        }
+        return prev[b.length]
+    }
+
+    /** Words close to [word] by edit distance (same first letter, similar length). */
+    private fun fuzzyMatches(dict: DictEntry, word: String, limit: Int): List<Pair<String, Int>> {
+        if (word.isBlank()) return emptyList()
+        val maxDist = if (word.length >= 5) 2 else 1
+        val first = word.first()
+        val result = ArrayList<Pair<String, Int>>()
+        for ((candidate, freq) in dict.words.tailMap(first.toString())) {
+            if (candidate.first() != first) break
+            if (kotlin.math.abs(candidate.length - word.length) > maxDist) continue
+            if (levenshtein(candidate, word) <= maxDist) {
+                result.add(candidate to freq)
+            }
+        }
+        result.sortByDescending { it.second }
+        return result.take(limit)
+    }
+
     override suspend fun spell(
         subtype: Subtype,
         word: String,
@@ -114,7 +149,7 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
         if (dict.words.containsKey(lower) || dict.words.containsKey(word)) {
             return SpellingResult.validWord()
         }
-        val suggestions = prefixMatches(dict, lower, maxSuggestionCount).map { it.first }.toTypedArray()
+        val suggestions = fuzzyMatches(dict, lower, maxSuggestionCount).map { it.first }.toTypedArray()
         return if (suggestions.isEmpty()) {
             SpellingResult.validWord()
         } else {
@@ -186,6 +221,19 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
             }
             .take(maxCandidateCount)
         val composingIsValidWord = dict.words.containsKey(composing)
+        if (matches.isEmpty() && !composingIsValidWord) {
+            // Typo with no prefix completions: offer close dictionary words and
+            // allow auto-correction on word separators (e.g. "сым" -> "сын").
+            return fuzzyMatches(dict, composing, maxCandidateCount).mapIndexed { index, (word, freq) ->
+                WordSuggestionCandidate(
+                    text = word,
+                    secondaryText = null,
+                    confidence = (1.0 - index * 0.1).coerceAtLeast(0.1),
+                    isEligibleForAutoCommit = index == 0,
+                    sourceProvider = this@LatinLanguageProvider,
+                )
+            }
+        }
         return matches.mapIndexed { index, (word, freq) ->
             WordSuggestionCandidate(
                 text = word,
